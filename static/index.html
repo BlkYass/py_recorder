@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Screen + System + Mic Recorder</title>
+</head>
+<body>
+  <h2>Screen + System + Mic Recorder</h2>
+  <button id="start">Start Recording</button>
+  <button id="stop" disabled>Stop Recording</button>
+
+  <script>
+    let recorder;
+    let chunks = [];
+
+    document.getElementById("start").onclick = async () => {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+        const audioContext = new AudioContext();
+        await audioContext.resume();
+        const destination = audioContext.createMediaStreamDestination();
+
+        if (screenStream.getAudioTracks().length > 0) {
+          const systemSource = audioContext.createMediaStreamSource(screenStream);
+          systemSource.connect(destination);
+        }
+        if (micStream.getAudioTracks().length > 0) {
+          const micSource = audioContext.createMediaStreamSource(micStream);
+          const micGain = audioContext.createGain();
+          micGain.gain.value = 1.0;
+          micSource.connect(micGain).connect(destination);
+        }
+
+        const combinedStream = new MediaStream([
+          ...screenStream.getVideoTracks(),
+          ...destination.stream.getAudioTracks()
+        ]);
+
+        recorder = new MediaRecorder(combinedStream, { mimeType: "video/webm; codecs=vp9,opus" });
+        chunks = [];
+        recorder.ondataavailable = e => { if (e.data.size>0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: "video/webm" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "recording.webm";
+          a.click();
+        };
+
+        recorder.start();
+        document.getElementById("stop").disabled = false;
+        console.log("Recording started");
+
+      } catch (err) {
+        alert("Error: "+err.message);
+        console.error(err);
+      }
+    };
+
+    document.getElementById("stop").onclick = () => {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      document.getElementById("stop").disabled = true;
+      console.log("Recording stopped");
+    };
+  </script>
+</body>
+</html>
